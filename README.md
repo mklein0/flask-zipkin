@@ -32,6 +32,19 @@ def hello():
     return r.text
 ```
 
+If you use blueprints or some other lazy dependency management.
+
+```
+@bp.route('/')
+def hello():
+    zipkin = flask.current_app.extensions['zipkin']
+
+    headers = {}
+    headers.update(zipkin.create_http_headers_for_new_span())
+    r = requests.get('http://localhost:5001', headers=headers)
+    return r.text
+```
+
 
 
 `flask_zipkin` will use http transport by default. You could define a transport, like:
