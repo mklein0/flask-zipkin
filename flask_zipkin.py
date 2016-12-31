@@ -19,6 +19,8 @@ __all__ = ['Zipkin']
 
 class Zipkin(object):
 
+    PREAMBLE = str.encode('\x0c\x00\x00\x00\x01')
+
     def _gen_random_id(self):
         return ''.join(
             random.choice(
@@ -40,7 +42,7 @@ class Zipkin(object):
 
     def default_handler(self, encoded_span):
         try:
-            body = str.encode('\x0c\x00\x00\x00\x01') + encoded_span
+            body = self.PREAMBLE + encoded_span
             return requests.post(
                 self.zipkin_dsn,
                 data=body,
