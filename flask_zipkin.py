@@ -107,7 +107,7 @@ class Zipkin(object):
 
         handler = self._transport_handler or self.default_handler
 
-        span = zipkin.zipkin_span(
+        span = zipkin.zipkin_server_span(
             service_name=self.service_name,
             span_name=request.endpoint,
             transport_handler=handler,
