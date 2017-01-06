@@ -117,6 +117,13 @@ class Zipkin(object):
         g._zipkin_span = span
         g._zipkin_span.start()
 
+        # Keys found https://github.com/openzipkin/zipkin/blob/master/zipkin/src/main/java/zipkin/TraceKeys.java
+        span.update_binary_annotations_for_root_span({
+            'http.method': request.method,
+            'http.path': request.path,
+            'http.host': request.host,
+        })
+
     def exempt(self, view):
         view_location = '{0}.{1}'.format(view.__module__, view.__name__)
         self._exempt_views.add(view_location)
@@ -127,7 +134,12 @@ class Zipkin(object):
             return response
         if not hasattr(g, '_zipkin_span'):
             return response
-        g._zipkin_span.stop()
+
+        span = g._zipkin_span
+        span.update_binary_annotations_for_root_span({
+            'http.status_code': response.status_code,
+        })
+        span.stop()
         return response
 
     def create_http_headers_for_new_span(self):
