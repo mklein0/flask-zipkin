@@ -1,10 +1,10 @@
-import random
-import string
+#
 from flask import g
 from flask import request
 from flask import _app_ctx_stack
 from flask import current_app
 
+import socket
 import requests
 from py_zipkin import zipkin
 
@@ -22,9 +22,7 @@ class Zipkin(object):
     PREAMBLE = str.encode('\x0c\x00\x00\x00\x01')
 
     def _gen_random_id(self):
-        return ''.join(
-            random.choice(
-                string.digits) for i in range(16))
+        return zipkin.generate_random_64bit_string()
 
     def __init__(self, app=None, sample_rate=100):
         self._exempt_views = set()
@@ -33,6 +31,7 @@ class Zipkin(object):
         self._transport_exception_handler = None
         self.zipkin_dsn = None
         self.service_name = 'unknown'
+        self.machine_name = socket.getfqdn()
 
         if app is not None:
             self.init_app(app)
@@ -108,8 +107,8 @@ class Zipkin(object):
         handler = self._transport_handler or self.default_handler
 
         span = zipkin.zipkin_server_span(
-            service_name=self.service_name,
-            span_name=request.endpoint,
+            service_name='wsgi.flask:' + self.service_name,
+            span_name='{}:{}'.format(request.method.upper(), request.endpoint),
             transport_handler=handler,
             sample_rate=self._sample_rate,
             zipkin_attrs=zipkin_attrs
@@ -117,8 +116,16 @@ class Zipkin(object):
         g._zipkin_span = span
         g._zipkin_span.start()
 
+        self.annotate_before_request(span)
+
+    def annotate_before_request(self, span):
+        # type: (py_zipkin.zipkin.zipkin_client_span) -> None
+
         # Keys found https://github.com/openzipkin/zipkin/blob/master/zipkin/src/main/java/zipkin/TraceKeys.java
         span.update_binary_annotations_for_root_span({
+            'wsgi.name': self.service_name,
+            'wsgi.framework': 'flask',
+            'wsgi.machine': self.machine_name,
             'http.method': request.method,
             'http.path': request.path,
             'http.host': request.host,
@@ -136,11 +143,15 @@ class Zipkin(object):
             return response
 
         span = g._zipkin_span
+        self.annotate_after_request(span, response)
+        span.stop()
+        return response
+
+    def annotate_after_request(self, span, response):
+        # type: (py_zipkin.zipkin.zipkin_client_span, flask.Response) -> None
         span.update_binary_annotations_for_root_span({
             'http.status_code': response.status_code,
         })
-        span.stop()
-        return response
 
     def create_http_headers_for_new_span(self):
         if self._disable:
